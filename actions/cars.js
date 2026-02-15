@@ -17,11 +17,21 @@ async function fileToBase64(file) {
 
 export async function processCarImageWithAI(file) {
     try {
-        if (!process.env.Gemini_API_KEY) {
+        // ensure we use the proper environment variable name (Windows envs are case-insensitive but keep it consistent)
+        if (!process.env.GEMINI_API_KEY) {
             throw new Error("Gemini API key is not set");
         }
-        const genAI = new GoogleGenerativeAI(process.env.Gemini_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        // Gemini models live on the v1 endpoint; requestOptions overrides the
+        // default v1beta path used by the SDK.  The previous `gemini-1.5` name
+        // returned a 404 because the fresh API key only has access to newer
+        // generations.  Use `listModels.js` script to see what your key can call.
+        // `gemini-2.5-flash` is one of the available multimodal models in the
+        // project as of 2026-02-15.
+        const model = genAI.getGenerativeModel({
+          model: "gemini-2.5-flash",
+          requestOptions: { apiVersion: "v1" },
+        });
 
         const base64Image = await fileToBase64(file);
 

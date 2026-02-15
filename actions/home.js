@@ -108,7 +108,15 @@ export async function processImageSearch(file) {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Gemini models require the v1 endpoint; the SDK defaults to v1beta so we
+    // explicitly request v1.  The project associated with the API key seen in
+    // `.env` doesn't expose `gemini-1.5`, which was causing 404s – you can run
+    // `node scripts/listModels.js` to inspect available names.  `gemini-2.5-flash`
+    // is present and supports generateContent (multimodal).
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      requestOptions: { apiVersion: "v1" },
+    });
 
 
     const base64Image = await fileToBase64(file);

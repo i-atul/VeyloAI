@@ -18,7 +18,7 @@ Veylo is a next-generation AI-powered vehicle marketplace. Easily buy, sell, and
 - Tailwind CSS
 - Prisma ORM
 - Clerk & Supabase (authentication)
-- Google Generative AI (car detail extraction)
+- Google Generative AI (car detail extraction using the `gemini-2.5-flash` model or whichever is available in your project)
 - PostgreSQL (database)
 - Arcjet(rate limiting and security)
 - Vercel (deployment)
@@ -47,8 +47,7 @@ Veylo is a next-generation AI-powered vehicle marketplace. Easily buy, sell, and
      NEXT_PUBLIC_SUPABASE_ANON_KEY=""
      SUPABASE_SERVICE_ROLE_KEY=""
      ARCJET_KEY=""
-     GEMINI_API_KEY=""
-     ```
+     GEMINI_API_KEY=""  # must be a valid key; run `node scripts/listModels.js` to verify which Gemini models your project can access (example uses `gemini-2.5-flash`).     ```
 4. Run the development server:
    ```sh
    npm run dev

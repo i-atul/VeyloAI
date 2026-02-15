@@ -165,11 +165,15 @@ const AddCarForm = () => {
       setValue("transmission", carDetails.transmission);
       setValue("description", carDetails.description);
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setUploadedImages((prev) => [...prev, e.target.result]);
-      };
-      reader.readAsDataURL(uploadedAiImage);
+      if (uploadedAiImage instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setUploadedImages((prev) => [...prev, e.target.result]);
+        };
+        reader.readAsDataURL(uploadedAiImage);
+      } else {
+        console.warn("uploadedAiImage is not available for preview", uploadedAiImage);
+      }
 
       toast.success("Successfully extracted car details", {
         description: `Detected ${carDetails.year} ${carDetails.make} ${

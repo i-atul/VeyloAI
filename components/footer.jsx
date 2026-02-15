@@ -58,8 +58,9 @@ export default function Footer() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 mt-8 text-center text-gray-400 text-xs">
-        © {new Date().getFullYear()} Veylo. All rights reserved.
+      <div className="container mx-auto px-4 mt-8 text-center text-gray-400 text-xs space-y-1">
+        <div>© {new Date().getFullYear()} Veylo. All rights reserved.</div>
+        <div>Developed by Atul</div>
       </div>
     </footer>
   );

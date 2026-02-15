@@ -1,5 +1,6 @@
 {
   "name": "veylo",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "db:push": "prisma db push --accept-data-loss",
+    "seed": "node prisma/seed.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -30,7 +33,7 @@
     "@supabase/supabase-js": "^2.49.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "date-fns": "^4.1.0",
+    "date-fns": "^3.6.0",
     "lucide-react": "^0.511.0",
     "next": "^15.1.8",
     "next-themes": "^0.4.6",
@@ -52,5 +55,8 @@
     "prisma": "^6.8.2",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
