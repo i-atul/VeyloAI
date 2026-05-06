@@ -4,7 +4,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase";
 import { serializeCarData } from "@/lib/helper";
@@ -149,20 +148,14 @@ export async function addCar({ carData, images }) {
     const folderPath = `cars/${carId}`;
 
 
-    const cookieStore = await cookies();
-    // const supabase = createClient(cookieStore);
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-
-   
+    const supabase = createClient();
+    const bucket = process.env.SUPABASE_BUCKET || "vehicle-images";
     const imageUrls = [];
 
     for (let i = 0; i < images.length; i++) {
       const base64Data = images[i];
 
-      if (!base64Data || !base64Data.startsWith("data:image/")) {
+      if (!base64Data || !/^data:image\/(jpeg|jpg|png|webp);base64,/.test(base64Data)) {
         console.warn("Skipping invalid image data");
         continue;
       }
@@ -170,26 +163,32 @@ export async function addCar({ carData, images }) {
       const base64 = base64Data.split(",")[1];
       const imageBuffer = Buffer.from(base64, "base64");
 
-      const mimeMatch = base64Data.match(/data:image\/([a-zA-Z0-9]+);/);
-      const fileExtension = mimeMatch ? mimeMatch[1] : "jpeg";
-
+      const mimeMatch = base64Data.match(/data:image\/(jpeg|jpg|png|webp);/);
+      const fileExtension = mimeMatch ? mimeMatch[1].replace("jpg", "jpeg") : "jpeg";
       const fileName = `image-${Date.now()}-${i}.${fileExtension}`;
       const filePath = `${folderPath}/${fileName}`;
 
-      const { data, error } = await supabase.storage
-        .from("vehicle-images")
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
         .upload(filePath, imageBuffer, {
           contentType: `image/${fileExtension}`,
         });
 
-      if (error) {
-        console.error("Error uploading image:", error);
-        throw new Error(`Failed to upload image: ${error.message}`);
+      if (uploadError) {
+        console.error("Error uploading image:", uploadError);
+        throw new Error(`Failed to upload image: ${uploadError.message}`);
       }
 
-      const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/vehicle-images/${filePath}`; 
+      const { data: publicUrlData, error: publicUrlError } = await supabase.storage
+        .from(bucket)
+        .getPublicUrl(filePath);
 
-      imageUrls.push(publicUrl);
+      if (publicUrlError || !publicUrlData?.publicUrl) {
+        console.error("Error generating public URL:", publicUrlError);
+        throw new Error("Failed to resolve image URL after upload");
+      }
+
+      imageUrls.push(publicUrlData.publicUrl);
     }
 
     // Validate required fields and types
@@ -314,25 +313,22 @@ export async function deleteCar(id) {
     });
 
     try {
-      const cookieStore = cookies();
-      const supabase = createClient(cookieStore);
+      const supabase = createClient();
+      const bucket = process.env.SUPABASE_BUCKET || "vehicle-images";
 
       const filePaths = car.images
         .map((imageUrl) => {
           const url = new URL(imageUrl);
-          const pathMatch = url.pathname.match(/\/vehicle-images\/(.*)/);
+          const pathMatch = url.pathname.match(new RegExp(`/storage/v1/object/public/${bucket}/(.*)`));
           return pathMatch ? pathMatch[1] : null;
         })
         .filter(Boolean);
 
       if (filePaths.length > 0) {
-        const { error } = await supabase.storage
-          .from("vehicle-images")
-          .remove(filePaths);
+        const { error } = await supabase.storage.from(bucket).remove(filePaths);
 
         if (error) {
           console.error("Error deleting images:", error);
-  
         }
       }
     } catch (storageError) {

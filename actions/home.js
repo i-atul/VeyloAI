@@ -82,7 +82,7 @@ export async function processImageSearch(file) {
 
     // Check rate limit
     const decision = await aj.protect(req, {
-      requested: 1, 
+      requested: 1,
     });
 
     if (decision.isDenied()) {
@@ -102,17 +102,12 @@ export async function processImageSearch(file) {
       throw new Error("Request blocked");
     }
 
-  
+
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("Gemini API key is not configured");
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    // Gemini models require the v1 endpoint; the SDK defaults to v1beta so we
-    // explicitly request v1.  The project associated with the API key seen in
-    // `.env` doesn't expose `gemini-1.5`, which was causing 404s – you can run
-    // `node scripts/listModels.js` to inspect available names.  `gemini-2.5-flash`
-    // is present and supports generateContent (multimodal).
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       requestOptions: { apiVersion: "v1" },
@@ -129,7 +124,7 @@ export async function processImageSearch(file) {
       },
     };
 
-   
+
     const prompt = `
       Analyze this car image and extract the following information for a search query:
       1. Make (manufacturer)
@@ -154,7 +149,7 @@ export async function processImageSearch(file) {
     const text = response.text();
     const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
 
- 
+
     try {
       const carDetails = JSON.parse(cleanedText);
 
@@ -171,6 +166,7 @@ export async function processImageSearch(file) {
       };
     }
   } catch (error) {
+    console.error("AI Search error:", error);
     throw new Error("AI Search error:" + error.message);
   }
 }

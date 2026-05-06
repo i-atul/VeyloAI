@@ -68,7 +68,7 @@ export function TestDriveCard({
             {booking.car.images && booking.car.images.length > 0 ? (
               <div className="relative w-full h-full">
                 <Image
-                  src={booking.car.images[0]}
+                  src={booking.car.images[0] || "/logo.png"}
                   alt={`${booking.car.make} ${booking.car.model}`}
                   fill
                   className="object-cover rounded-t-xl sm:rounded-l-xl sm:rounded-tr-none border-b border-gray-200"

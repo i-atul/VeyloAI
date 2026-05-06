@@ -95,7 +95,7 @@ const CarDetails = ({ car, testDriveInfo }) => {
                     <div className="aspect-video rounded-xl overflow-hidden relative mb-6 shadow-lg border border-gray-200">
                         {car.images && car.images.length > 0 ? (
                             <Image
-                                src={car.images[currentImageIndex]}
+                                src={car.images[currentImageIndex] || "/logo.png"}
                                 alt={`${car.year} ${car.make} ${car.model}`}
                                 fill
                                 className="object-cover transition-transform duration-300 hover:scale-105"
@@ -120,7 +120,7 @@ const CarDetails = ({ car, testDriveInfo }) => {
                                     onClick={() => setCurrentImageIndex(index)}
                                 >
                                     <Image
-                                        src={image}
+                                        src={image || "/logo.png"}
                                         alt={`${car.year} ${car.make} ${car.model} - view ${index + 1}`}
                                         fill
                                         className="object-cover rounded-lg"

@@ -41,7 +41,7 @@ async function main() {
       description: "Well maintained Toyota Corolla with low mileage.",
       status: "AVAILABLE",
       featured: false,
-      images: ["/images/cars/toyota-corolla-1.jpg"],
+      images: ["/logo.png"],
     },
     {
       make: "Honda",
@@ -57,7 +57,7 @@ async function main() {
       description: "Sporty Honda Civic in excellent condition.",
       status: "AVAILABLE",
       featured: true,
-      images: ["/images/cars/honda-civic-1.jpg"],
+      images: ["/logo.png"],
     },
     {
       make: "Ford",
@@ -73,7 +73,7 @@ async function main() {
       description: "Classic Ford Mustang, perfect for collectors.",
       status: "AVAILABLE",
       featured: true,
-      images: ["/images/cars/ford-mustang-1.jpg"],
+      images: ["/logo.png"],
     },
     {
       make: "Tesla",
@@ -89,7 +89,7 @@ async function main() {
       description: "Electric efficiency with the Tesla Model 3.",
       status: "AVAILABLE",
       featured: false,
-      images: ["/images/cars/tesla-model3-1.jpg"],
+      images: ["/logo.png"],
     },
     {
       make: "BMW",
@@ -105,7 +105,7 @@ async function main() {
       description: "Luxurious BMW X5 with advanced features.",
       status: "AVAILABLE",
       featured: false,
-      images: ["/images/cars/bmw-x5-1.jpg"],
+      images: ["/logo.png"],
     },
   ];
 

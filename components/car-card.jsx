@@ -63,7 +63,7 @@ const CarCard = ({car}) => {
     <div className='relative h-52'>
         {car.images && car.images.length > 0 ?(
        <div className="relative w-full h-full">
-        <Image src={car.images[0]}
+        <Image src={car.images[0] || "/logo.png"}
         alt={`${car.make} ${car.model}`}
         fill
         className="object-cover group-hover:scale-110 transition duration-500 rounded-t-2xl"

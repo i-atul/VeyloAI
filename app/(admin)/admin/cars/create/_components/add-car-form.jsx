@@ -68,6 +68,7 @@ const AddCarForm = () => {
     getValues,
     formState: { errors },
     handleSubmit,
+    reset,
     watch,
   } = useForm({
     resolver: zodResolver(CarFormSchema),
@@ -194,9 +195,16 @@ const AddCarForm = () => {
   useEffect(() => {
     if (addCarResult?.success) {
       toast.success("Car added successfully!");
+      // Reset form and state
+      reset();
+      setUploadedImages([]);
+      setUploadedAiImage(null);
+      setImagePreview(null);
+      setActiveTab("ai");
+      setImageError("");
       router.push("/admin/cars");
     }
-  }, [addCarResult])
+  }, [addCarResult, reset, router])
 
   const onSubmit = async (data) => {
     if (uploadedImages.length === 0) {
