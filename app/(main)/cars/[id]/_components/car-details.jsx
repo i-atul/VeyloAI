@@ -22,6 +22,16 @@ const CarDetails = ({ car, testDriveInfo }) => {
     const router = useRouter();
     const { isSignedIn } = useAuth();
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [mainImageSrc, setMainImageSrc] = useState(() => {
+      if (Array.isArray(car.images) && car.images.length > 0) {
+        const firstImage = car.images[0];
+        if (typeof firstImage === 'string' && firstImage.trim()) {
+          return firstImage;
+        }
+      }
+      return '/logo.png';
+    });
+    const [imageError, setImageError] = useState(false);
     const [isWishlisted, setIsWishlisted] = useState(car.wishlisted);
 
     const {
@@ -37,6 +47,22 @@ const CarDetails = ({ car, testDriveInfo }) => {
             toast.success(toggleResult.message);
         }
     }, [toggleResult, isWishlisted]);
+
+    useEffect(() => {
+        if (Array.isArray(car.images) && car.images.length > currentImageIndex) {
+            const imageUrl = car.images[currentImageIndex];
+            if (typeof imageUrl === 'string' && imageUrl.trim()) {
+                setMainImageSrc(imageUrl);
+                setImageError(false);
+            } else {
+                setMainImageSrc('/logo.png');
+                setImageError(true);
+            }
+        } else {
+            setMainImageSrc('/logo.png');
+            setImageError(true);
+        }
+    }, [car, currentImageIndex]);
 
     useEffect(() => {
         if (toggleError) {
@@ -93,13 +119,14 @@ const CarDetails = ({ car, testDriveInfo }) => {
             <div className="flex flex-col lg:flex-row gap-10 max-w-6xl mx-auto pt-10 px-4 md:px-8 xl:px-0">
                 <div className="w-full lg:w-7/12">
                     <div className="aspect-video rounded-xl overflow-hidden relative mb-6 shadow-lg border border-gray-200">
-                        {car.images && car.images.length > 0 ? (
+                        {Array.isArray(car.images) && car.images.length > 0 && !imageError ? (
                             <Image
-                                src={car.images[currentImageIndex] || "/logo.png"}
+                                src={mainImageSrc}
                                 alt={`${car.year} ${car.make} ${car.model}`}
                                 fill
                                 className="object-cover transition-transform duration-300 hover:scale-105"
                                 priority
+                                onError={() => setImageError(true)}
                             />
                         ) : (
                             <div className="w-full h-full bg-gray-100 flex items-center justify-center">
@@ -108,24 +135,26 @@ const CarDetails = ({ car, testDriveInfo }) => {
                         )}
                     </div>
                     {/* Thumbnails */}
-                    {car.images && car.images.length > 1 && (
+                    {Array.isArray(car.images) && car.images.length > 1 && (
                         <div className="flex gap-3 overflow-x-auto pb-2">
                             {car.images.map((image, index) => (
-                                <div
-                                    key={index}
-                                    className={`relative cursor-pointer rounded-lg h-20 w-28 flex-shrink-0 border-2 transition-all duration-200 ${index === currentImageIndex
-                                        ? "border-cyan-500 shadow-lg"
-                                        : "border-transparent opacity-70 hover:opacity-100 hover:border-cyan-300"
-                                        }`}
-                                    onClick={() => setCurrentImageIndex(index)}
-                                >
-                                    <Image
-                                        src={image || "/logo.png"}
-                                        alt={`${car.year} ${car.make} ${car.model} - view ${index + 1}`}
-                                        fill
-                                        className="object-cover rounded-lg"
-                                    />
-                                </div>
+                                image && typeof image === 'string' && image.trim() && (
+                                    <div
+                                        key={index}
+                                        className={`relative cursor-pointer rounded-lg h-20 w-28 flex-shrink-0 border-2 transition-all duration-200 ${index === currentImageIndex
+                                            ? "border-cyan-500 shadow-lg"
+                                            : "border-transparent opacity-70 hover:opacity-100 hover:border-cyan-300"
+                                            }`}
+                                        onClick={() => setCurrentImageIndex(index)}
+                                    >
+                                        <Image
+                                            src={image || "/logo.png"}
+                                            alt={`${car.year} ${car.make} ${car.model} - view ${index + 1}`}
+                                            fill
+                                            className="object-cover rounded-lg"
+                                        />
+                                    </div>
+                                )
                             ))}
                         </div>
                     )};

@@ -8,6 +8,406 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase";
 import { serializeCarData } from "@/lib/helper";
 
+// Validation constants
+const VALID_FUEL_TYPES = ["Petrol", "Diesel", "Electric", "Hybrid", "Plug-in Hybrid"];
+const VALID_TRANSMISSIONS = ["Automatic", "Manual", "Semi-Automatic"];
+const VALID_BODY_TYPES = ["SUV", "Sedan", "Hatchback", "Convertible", "Coupe", "Wagon", "Pickup"];
+const VALID_STATUSES = ["AVAILABLE", "UNAVAILABLE", "SOLD"];
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_YEAR = 1980;
+const MAX_YEAR = CURRENT_YEAR + 1;
+const MIN_PRICE = 100000; // Minimum price in INR
+const MAX_PRICE = 100000000; // Maximum price in INR (10 crore)
+const MAX_MILEAGE = 99;
+
+// Validation result structure
+function validationError(message, field) {
+  return {
+    success: false,
+    error: message,
+    field: field || null
+  };
+}
+
+// Soft validation for AI extracted data - lenient, allows empty fields
+function softValidateAICarData(carDetails) {
+  const warnings = [];
+  const extractedFields = {};
+
+  // Helper function to find closest enum match
+  const findClosestMatch = (value, validOptions) => {
+    const cleanValue = String(value).trim();
+    
+    // Exact match
+    if (validOptions.includes(cleanValue)) {
+      return cleanValue;
+    }
+
+    // Case-insensitive match
+    const lowerValue = cleanValue.toLowerCase();
+    const match = validOptions.find(opt => opt.toLowerCase() === lowerValue);
+    if (match) return match;
+
+    // Partial match - check if value contains any valid option
+    for (const option of validOptions) {
+      if (cleanValue.toLowerCase().includes(option.toLowerCase())) {
+        warnings.push(`Auto-corrected ${cleanValue} → ${option}`);
+        return option;
+      }
+    }
+
+    // No match found - return empty string and warn
+    warnings.push(`Could not match "${cleanValue}". Valid options: ${validOptions.join(", ")}`);
+    return "";
+  };
+
+  // Extract make and model (required)
+  const make = carDetails.make ? String(carDetails.make).trim() : "";
+  const model = carDetails.model ? String(carDetails.model).trim() : "";
+  
+  if (!make) {
+    warnings.push("Make not extracted - please provide manually");
+  } else if (make.length > 50) {
+    warnings.push(`Make truncated to 50 characters`);
+    extractedFields.make = make.substring(0, 50);
+  } else {
+    extractedFields.make = make;
+  }
+
+  if (!model) {
+    warnings.push("Model not extracted - please provide manually");
+  } else if (model.length > 50) {
+    warnings.push(`Model truncated to 50 characters`);
+    extractedFields.model = model.substring(0, 50);
+  } else {
+    extractedFields.model = model;
+  }
+
+  // Extract year (required)
+  const year = Number(carDetails.year);
+  if (isNaN(year) || !Number.isInteger(year)) {
+    warnings.push("Year not properly extracted - please provide manually");
+    extractedFields.year = "";
+  } else if (year < MIN_YEAR || year > MAX_YEAR) {
+    warnings.push(`Year ${year} out of range (${MIN_YEAR}-${MAX_YEAR}) - please verify`);
+    extractedFields.year = "";
+  } else {
+    extractedFields.year = year;
+  }
+
+  // Extract color (optional but try to extract)
+  const color = carDetails.color ? String(carDetails.color).trim() : "";
+  if (color && color.length > 30) {
+    warnings.push(`Color truncated to 30 characters`);
+    extractedFields.color = color.substring(0, 30);
+  } else {
+    extractedFields.color = color;
+  }
+
+  // Extract body type with fuzzy matching
+  const bodyType = carDetails.bodyType ? String(carDetails.bodyType).trim() : "";
+  if (bodyType) {
+    extractedFields.bodyType = findClosestMatch(bodyType, VALID_BODY_TYPES);
+  } else {
+    extractedFields.bodyType = "";
+  }
+
+  // Extract fuel type with fuzzy matching
+  const fuelType = carDetails.fuelType ? String(carDetails.fuelType).trim() : "";
+  if (fuelType) {
+    extractedFields.fuelType = findClosestMatch(fuelType, VALID_FUEL_TYPES);
+  } else {
+    extractedFields.fuelType = "";
+  }
+
+  // Extract transmission with fuzzy matching
+  const transmission = carDetails.transmission ? String(carDetails.transmission).trim() : "";
+  if (transmission) {
+    extractedFields.transmission = findClosestMatch(transmission, VALID_TRANSMISSIONS);
+  } else {
+    extractedFields.transmission = "";
+  }
+
+  // Extract price (required but allow empty)
+  const price = Number(carDetails.price);
+  if (isNaN(price) || price <= 0) {
+    warnings.push("Price not properly extracted - please provide manually");
+    extractedFields.price = "";
+  } else if (price < MIN_PRICE || price > MAX_PRICE) {
+    warnings.push(`Price out of expected range - please verify`);
+    extractedFields.price = price;
+  } else {
+    extractedFields.price = price;
+  }
+
+  // Extract mileage (required but allow empty)
+  const mileage = Number(carDetails.mileage);
+  if (isNaN(mileage) || !Number.isInteger(mileage)) {
+    warnings.push("Mileage not properly extracted - please provide manually");
+    extractedFields.mileage = "";
+  } else if (mileage < 0 || mileage > MAX_MILEAGE) {
+    warnings.push("Mileage out of expected range - please verify");
+    extractedFields.mileage = "";
+  } else {
+    extractedFields.mileage = mileage;
+  }
+
+  // Extract description (required but allow empty)
+  const description = carDetails.description ? String(carDetails.description).trim() : "";
+  if (description && description.length < 10) {
+    warnings.push("Description is too short - please expand");
+    extractedFields.description = description.length > 0 ? description : "";
+  } else if (description && description.length > 1000) {
+    warnings.push("Description truncated to 1000 characters");
+    extractedFields.description = description.substring(0, 1000);
+  } else {
+    extractedFields.description = description;
+  }
+
+  // Extract confidence
+  const confidence = Number(carDetails.confidence) || 0;
+  extractedFields.confidence = Math.min(1, Math.max(0, confidence));
+
+  if (extractedFields.confidence < 0.4) {
+    warnings.push("⚠️ Low AI confidence - please carefully review all extracted details");
+  }
+
+  return {
+    success: true,
+    data: extractedFields,
+    warnings: warnings,
+    confidence: extractedFields.confidence,
+    partialExtraction: Object.values(extractedFields).some(v => v === "" || v === null)
+  };
+}
+
+// Strict validation for AI extracted data - strict, requires all fields
+function validateAICarData(carDetails) {
+  // Check required fields exist and are non-empty
+  const requiredFields = ["make", "model", "year", "color", "bodyType", "price", "mileage", "fuelType", "transmission", "description", "confidence"];
+  
+  for (const field of requiredFields) {
+    if (!(field in carDetails) || carDetails[field] === null || carDetails[field] === "") {
+      return validationError(`AI extraction missing required field: ${field}`, field);
+    }
+  }
+
+  // Validate make and model
+  const make = String(carDetails.make).trim();
+  const model = String(carDetails.model).trim();
+  
+  if (make.length < 2 || make.length > 50) {
+    return validationError("Make must be between 2-50 characters", "make");
+  }
+  if (model.length < 1 || model.length > 50) {
+    return validationError("Model must be between 1-50 characters", "model");
+  }
+  if (!/^[a-zA-Z0-9\s\-]+$/.test(make)) {
+    return validationError("Make contains invalid characters", "make");
+  }
+  if (!/^[a-zA-Z0-9\s\-]+$/.test(model)) {
+    return validationError("Model contains invalid characters", "model");
+  }
+
+  // Validate year
+  const year = Number(carDetails.year);
+  if (isNaN(year) || !Number.isInteger(year)) {
+    return validationError("Year must be a valid integer", "year");
+  }
+  if (year < MIN_YEAR || year > MAX_YEAR) {
+    return validationError(`Year must be between ${MIN_YEAR} and ${MAX_YEAR}`, "year");
+  }
+
+  // Validate color
+  const color = String(carDetails.color).trim();
+  if (color.length < 2 || color.length > 30) {
+    return validationError("Color must be between 2-30 characters", "color");
+  }
+  if (!/^[a-zA-Z\s]+$/.test(color)) {
+    return validationError("Color should only contain letters and spaces", "color");
+  }
+
+  // Validate body type
+  const bodyType = String(carDetails.bodyType).trim();
+  if (!VALID_BODY_TYPES.includes(bodyType)) {
+    return validationError(`Body type must be one of: ${VALID_BODY_TYPES.join(", ")}`, "bodyType");
+  }
+
+  // Validate fuel type
+  const fuelType = String(carDetails.fuelType).trim();
+  if (!VALID_FUEL_TYPES.includes(fuelType)) {
+    return validationError(`Fuel type must be one of: ${VALID_FUEL_TYPES.join(", ")}`, "fuelType");
+  }
+
+  // Validate transmission
+  const transmission = String(carDetails.transmission).trim();
+  if (!VALID_TRANSMISSIONS.includes(transmission)) {
+    return validationError(`Transmission must be one of: ${VALID_TRANSMISSIONS.join(", ")}`, "transmission");
+  }
+
+  // Validate price
+  const price = Number(carDetails.price);
+  if (isNaN(price) || price <= 0) {
+    return validationError("Price must be a positive number", "price");
+  }
+  if (price < MIN_PRICE || price > MAX_PRICE) {
+    return validationError(`Price must be between ₹${MIN_PRICE.toLocaleString()} and ₹${MAX_PRICE.toLocaleString()}`, "price");
+  }
+
+  // Validate mileage
+  const mileage = Number(carDetails.mileage);
+  if (isNaN(mileage) || !Number.isInteger(mileage)) {
+    return validationError("Mileage must be a valid integer", "mileage");
+  }
+  if (mileage < 0 || mileage > MAX_MILEAGE) {
+    return validationError(`Mileage must be between 0 and ${MAX_MILEAGE}`, "mileage");
+  }
+
+  // Semantic check: AI extracted used cars shouldn't have very low mileage
+  if (year < CURRENT_YEAR && mileage < 1000) {
+    return validationError(`Warning: ${year} car with mileage of ${mileage} seems unrealistic. Expected minimum 5000 miles for used car.`, "mileage");
+  }
+
+  // Validate description
+  const description = String(carDetails.description).trim();
+  if (description.length < 10 || description.length > 1000) {
+    return validationError("Description must be between 10-1000 characters", "description");
+  }
+
+  // Validate confidence
+  const confidence = Number(carDetails.confidence);
+  if (isNaN(confidence) || confidence < 0 || confidence > 1) {
+    return validationError("Confidence must be a number between 0 and 1", "confidence");
+  }
+
+  // Warn if confidence is low
+  if (confidence < 0.5) {
+    console.warn(`Warning: AI confidence is low (${(confidence * 100).toFixed(1)}%). Please verify extracted details.`);
+  }
+
+  return { success: true, data: carDetails };
+}
+
+// Comprehensive validation for car data before saving
+function validateCarData(carData) {
+  // Check all required fields
+  const requiredFields = ["make", "model", "year", "price", "mileage", "color", "fuelType", "transmission", "bodyType", "description", "status"];
+  
+  for (const field of requiredFields) {
+    if (carData[field] === undefined || carData[field] === null || carData[field] === "") {
+      return validationError(`Missing required field: ${field}`, field);
+    }
+  }
+
+  // Validate make
+  const make = String(carData.make).trim();
+  if (make.length < 2 || make.length > 50) {
+    return validationError("Make must be between 2-50 characters", "make");
+  }
+
+  // Validate model
+  const model = String(carData.model).trim();
+  if (model.length < 1 || model.length > 50) {
+    return validationError("Model must be between 1-50 characters", "model");
+  }
+
+  // Validate year
+  const year = Number(carData.year);
+  if (isNaN(year) || !Number.isInteger(year)) {
+    return validationError("Year must be a valid integer", "year");
+  }
+  if (year < MIN_YEAR || year > MAX_YEAR) {
+    return validationError(`Year must be between ${MIN_YEAR} and ${MAX_YEAR}`, "year");
+  }
+
+  // Validate price
+  const price = Number(carData.price);
+  if (isNaN(price) || price <= 0) {
+    return validationError("Price must be a positive number", "price");
+  }
+  if (price < MIN_PRICE || price > MAX_PRICE) {
+    return validationError(`Price must be between ₹${MIN_PRICE.toLocaleString()} and ₹${MAX_PRICE.toLocaleString()}`, "price");
+  }
+
+  // Validate mileage
+  const mileage = Number(carData.mileage);
+  if (isNaN(mileage) || !Number.isInteger(mileage)) {
+    return validationError("Mileage must be a valid integer", "mileage");
+  }
+  if (mileage < 0 || mileage > MAX_MILEAGE) {
+    return validationError(`Mileage must be between 0 and ${MAX_MILEAGE}`, "mileage");
+  }
+
+  // Validate color
+  const color = String(carData.color).trim();
+  if (color.length < 2 || color.length > 30) {
+    return validationError("Color must be between 2-30 characters", "color");
+  }
+
+  // Validate fuel type
+  const fuelType = String(carData.fuelType).trim();
+  if (!VALID_FUEL_TYPES.includes(fuelType)) {
+    return validationError(`Invalid fuel type. Must be one of: ${VALID_FUEL_TYPES.join(", ")}`, "fuelType");
+  }
+
+  // Validate transmission
+  const transmission = String(carData.transmission).trim();
+  if (!VALID_TRANSMISSIONS.includes(transmission)) {
+    return validationError(`Invalid transmission. Must be one of: ${VALID_TRANSMISSIONS.join(", ")}`, "transmission");
+  }
+
+  // Validate body type
+  const bodyType = String(carData.bodyType).trim();
+  if (!VALID_BODY_TYPES.includes(bodyType)) {
+    return validationError(`Invalid body type. Must be one of: ${VALID_BODY_TYPES.join(", ")}`, "bodyType");
+  }
+
+  // Validate description
+  const description = String(carData.description).trim();
+  if (description.length < 10 || description.length > 1000) {
+    return validationError("Description must be between 10-1000 characters", "description");
+  }
+
+  // Validate status
+  const status = String(carData.status).toUpperCase();
+  if (!VALID_STATUSES.includes(status)) {
+    return validationError(`Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`, "status");
+  }
+
+  // Validate featured (optional, should be boolean)
+  if (carData.featured !== undefined && typeof carData.featured !== "boolean") {
+    return validationError("Featured must be a boolean value", "featured");
+  }
+
+  // Validate seats (optional)
+  if (carData.seats !== undefined && carData.seats !== null) {
+    const seats = Number(carData.seats);
+    if (isNaN(seats) || !Number.isInteger(seats) || seats < 1 || seats > 9) {
+      return validationError("Seats must be an integer between 1 and 9", "seats");
+    }
+  }
+
+  // Semantic validation: Year vs Mileage relationship
+  if (year < CURRENT_YEAR) {
+    const age = CURRENT_YEAR - year;
+    const maxExpectedMileage = age * 20000; // Assume max 20k miles per year
+    
+    if (mileage > maxExpectedMileage * 1.5) {
+      console.warn(`Warning: Car mileage (${mileage}) seems high for a ${age}-year-old vehicle. Expected max ~${maxExpectedMileage} miles.`);
+    }
+  }
+
+  // Semantic validation: Price range based on year and mileage
+  if (year < CURRENT_YEAR - 15) {
+    // Older cars should generally be cheaper (unless rare/classic)
+    if (price > 3000000) { // 30 lakhs
+      console.warn(`Warning: High price for a car older than 15 years. Please verify pricing.`);
+    }
+  }
+
+  return { success: true, data: carData };
+}
+
 async function fileToBase64(file) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -82,33 +482,31 @@ export async function processCarImageWithAI(file) {
         try {
             const carDetails = JSON.parse(cleanedText);
 
-            const requiredFields = [
-                "make",
-                "model",
-                "year",
-                "color",
-                "bodyType",
-                "price",
-                "mileage",
-                "fuelType",
-                "transmission",
-                "description",
-                "confidence",
-            ];
-
-            const missingFields = requiredFields.filter(
-                (field) => !(field in carDetails)
-            )
-
-            if(missingFields.length > 0){
-                throw new Error(
-                    `AI response missing requred feild: ${missingFields.join(", ")}`
-                );
-            }
+            // Use SOFT validation for AI extraction - allows partial extraction
+            const validation = softValidateAICarData(carDetails);
+            
+            // Always return success with whatever we could extract
+            // User will fill in missing fields manually
+            const resultData = {
+                make: validation.data.make || "",
+                model: validation.data.model || "",
+                year: validation.data.year || "",
+                color: validation.data.color || "",
+                bodyType: validation.data.bodyType || "",
+                price: validation.data.price || "",
+                mileage: validation.data.mileage || "",
+                fuelType: validation.data.fuelType || "",
+                transmission: validation.data.transmission || "",
+                description: validation.data.description || "",
+                confidence: validation.confidence,
+            };
 
             return {
                 success: true,
-                data: carDetails,
+                data: resultData,
+                confidence: validation.confidence,
+                warnings: validation.warnings,
+                partialExtraction: validation.partialExtraction
             };
 
         } catch (error) {
@@ -149,7 +547,7 @@ export async function addCar({ carData, images }) {
 
 
     const supabase = createClient();
-    const bucket = process.env.SUPABASE_BUCKET || "vehicle-images";
+    const bucket = process.env.SUPABASE_BUCKET || "vehicle_image";
     const imageUrls = [];
 
     for (let i = 0; i < images.length; i++) {
@@ -179,76 +577,73 @@ export async function addCar({ carData, images }) {
         throw new Error(`Failed to upload image: ${uploadError.message}`);
       }
 
-      const { data: publicUrlData, error: publicUrlError } = await supabase.storage
+      // Try to get public URL first
+      const { data: publicUrlData } = await supabase.storage
         .from(bucket)
         .getPublicUrl(filePath);
 
-      if (publicUrlError || !publicUrlData?.publicUrl) {
-        console.error("Error generating public URL:", publicUrlError);
-        throw new Error("Failed to resolve image URL after upload");
-      }
+      if (publicUrlData?.publicUrl) {
+        imageUrls.push(publicUrlData.publicUrl);
+      } else {
+        // If public URL fails, use signed URL with 1-year expiration for reliability
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 year expiration
 
-      imageUrls.push(publicUrlData.publicUrl);
-    }
+        if (signedUrlError || !signedUrlData?.signedUrl) {
+          console.error("Error generating signed URL:", signedUrlError);
+          throw new Error("Failed to generate image URL after upload");
+        }
 
-    // Validate required fields and types
-    const requiredFields = [
-      "make", "model", "year", "price", "mileage", "color", "fuelType", "transmission", "bodyType", "description", "status", "featured"
-    ];
-    for (const field of requiredFields) {
-      if (
-        carData[field] === undefined ||
-        carData[field] === null ||
-        carData[field] === ""
-      ) {
-        return {
-          success: false,
-          error: `Missing required field: ${field}`,
-        };
+        imageUrls.push(signedUrlData.signedUrl);
       }
     }
-    // Type check for mileage (should be integer)
-    if (isNaN(carData.mileage) || !Number.isInteger(Number(carData.mileage))) {
-      return {
-        success: false,
-        error: "Mileage must be an integer value.",
-      };
+
+    // Validate all car data before saving to database
+    const validation = validateCarData(carData);
+    
+    if (!validation.success) {
+      return validation; // Return validation error with field info
     }
 
     if (imageUrls.length === 0) {
       return {
         success: false,
         error: "No valid images were uploaded",
+        field: "images"
       };
     }
+
     try {
       const car = await db.car.create({
         data: {
           id: carId, 
-          make: carData.make,
-          model: carData.model,
-          year: carData.year,
-          price: parseFloat(carData.price), 
-          mileage: Number(carData.mileage),
-          color: carData.color,
-          fuelType: carData.fuelType,
-          transmission: carData.transmission,
-          bodyType: carData.bodyType,
-          seats: carData.seats,
-          description: carData.description,
-          status: carData.status,
-          featured: carData.featured,
+          make: validation.data.make,
+          model: validation.data.model,
+          year: validation.data.year,
+          price: validation.data.price, 
+          mileage: validation.data.mileage,
+          color: validation.data.color,
+          fuelType: validation.data.fuelType,
+          transmission: validation.data.transmission,
+          bodyType: validation.data.bodyType,
+          seats: carData.seats ? Number(carData.seats) : null,
+          description: validation.data.description,
+          status: validation.data.status.toUpperCase(),
+          featured: carData.featured || false,
           images: imageUrls, 
         },
       });
       revalidatePath("/admin/cars");
       return {
         success: true,
+        message: `Car added successfully: ${validation.data.make} ${validation.data.model}`,
       };
     } catch (error) {
+      console.error("Database error while adding car:", error);
       return {
         success: false,
-        error: "Failed to add car: Please check all required fields and their types.",
+        error: `Failed to add car to database: ${error.message}`,
       };
     }
   } catch (error) {
@@ -314,13 +709,20 @@ export async function deleteCar(id) {
 
     try {
       const supabase = createClient();
-      const bucket = process.env.SUPABASE_BUCKET || "vehicle-images";
+      const bucket = process.env.SUPABASE_BUCKET || "vehicle_image";
 
       const filePaths = car.images
         .map((imageUrl) => {
           const url = new URL(imageUrl);
-          const pathMatch = url.pathname.match(new RegExp(`/storage/v1/object/public/${bucket}/(.*)`));
-          return pathMatch ? pathMatch[1] : null;
+          // Handle public URLs: /storage/v1/object/public/bucket/path
+          let pathMatch = url.pathname.match(new RegExp(`/storage/v1/object/public/${bucket}/(.*)`));
+          if (pathMatch) return pathMatch[1];
+          
+          // Handle signed URLs: /storage/v1/object/sign/bucket/path or /storage/v1/object/authenticated/bucket/path
+          pathMatch = url.pathname.match(new RegExp(`/storage/v1/object/(sign|authenticated)/${bucket}/(.*)`));
+          if (pathMatch) return pathMatch[2];
+          
+          return null;
         })
         .filter(Boolean);
 

@@ -47,8 +47,11 @@ export function TestDriveCard({
   renderStatusSelector = () => null,
 }) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-
- 
+  const [imageSrc, setImageSrc] = useState(
+    booking.car.images && booking.car.images.length > 0 && typeof booking.car.images[0] === 'string'
+      ? booking.car.images[0]
+      : '/logo.png'
+  );
   const handleCancel = async () => {
     if (!onCancel) return;
 
@@ -68,10 +71,11 @@ export function TestDriveCard({
             {booking.car.images && booking.car.images.length > 0 ? (
               <div className="relative w-full h-full">
                 <Image
-                  src={booking.car.images[0] || "/logo.png"}
+                  src={imageSrc}
                   alt={`${booking.car.make} ${booking.car.model}`}
                   fill
                   className="object-cover rounded-t-xl sm:rounded-l-xl sm:rounded-tr-none border-b border-gray-200"
+                  onError={() => setImageSrc('/logo.png')}
                 />
               </div>
             ) : (

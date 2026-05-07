@@ -143,29 +143,38 @@ const AddCarForm = () => {
     await processImageFn(uploadedAiImage);
   }
 
-  useFetch(() => {
-    if (processImageError){
-      toast.error(processImageError.message || "Failed to upload Car")
+  // Handle AI processing errors
+  useEffect(() => {
+    if (processImageError) {
+      toast.error(processImageError.message || "Failed to process image with AI");
     }
   }, [processImageError]);
 
-
-  
+  // Handle successful AI extraction
   useEffect(() => {
-    if(processImageResult?.success){
-       const carDetails = processImageResult.data;
+    if (processImageResult) {
+      if (!processImageResult.success) {
+        // Validation error from AI extraction
+        toast.error(processImageResult.error || "Failed to extract car details");
+        console.error("AI validation error:", processImageResult);
+        return;
+      }
 
+      const carDetails = processImageResult.data;
+
+      // Set form values from AI extracted data
       setValue("make", carDetails.make);
       setValue("model", carDetails.model);
       setValue("year", carDetails.year.toString());
       setValue("color", carDetails.color);
       setValue("bodyType", carDetails.bodyType);
       setValue("fuelType", carDetails.fuelType);
-      setValue("price", carDetails.price);
-      setValue("mileage", carDetails.mileage);
+      setValue("price", carDetails.price.toString());
+      setValue("mileage", carDetails.mileage.toString());
       setValue("transmission", carDetails.transmission);
       setValue("description", carDetails.description);
 
+      // Add uploaded image to images list
       if (uploadedAiImage instanceof Blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -176,18 +185,23 @@ const AddCarForm = () => {
         console.warn("uploadedAiImage is not available for preview", uploadedAiImage);
       }
 
-      toast.success("Successfully extracted car details", {
-        description: `Detected ${carDetails.year} ${carDetails.make} ${
-          carDetails.model
-        } with ${Math.round(carDetails.confidence * 100)}% confidence`,
-      });
+      // Show positive toast after AI extraction
+      const confidencePercent = Math.round((processImageResult.confidence || 0) * 100);
 
-      // Switch to manual tab
+      if (processImageResult.partialExtraction) {
+        toast.success("AI extracted some details", {
+          description: `Great news — the AI extracted available information automatically. ${confidencePercent}% confidence. Complete the remaining fields manually below.`,
+        });
+      } else {
+        toast.success("AI extracted all key details", {
+          description: `The image was analyzed successfully. ${confidencePercent}% confidence. Please verify the data and complete any optional fields.`,
+        });
+      }
+
+      // Switch to manual tab to let user review
       setActiveTab("manual");
-    
-  
     }
-  },[processImageResult, uploadedAiImage,setValue,] )
+  }, [processImageResult, uploadedAiImage, setValue, setActiveTab])
 
   const { data: addCarResult, loading: addCarLoading, fn: addCarFn } = useFetch(addCar);
 
@@ -292,22 +306,39 @@ const AddCarForm = () => {
             <CardHeader>
               <CardTitle>Car Details</CardTitle>
               <CardDescription>Provide the details of the car you wish to add to the inventory.</CardDescription>
+              {processImageResult?.partialExtraction && (
+                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-md">
+                  <p className="text-sm text-emerald-900">
+                    ✅ <strong>AI extracted partial details.</strong> Review the fields below and complete any missing information before submitting.
+                  </p>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit(onSubmit)} className='space-y-6'>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                   <div className="space-y-2">
-                    <Label htmlFor="make">Make</Label>
+                    <div className="flex items-center gap-1">
+                      <Label htmlFor="make">Make</Label>
+                      {processImageResult?.partialExtraction && !getValues("make") && (
+                        <span className="text-red-500 text-sm font-semibold">*</span>
+                      )}
+                    </div>
                     <Input
                       id="make"
                       {...register("make")}
                       placeholder="e.g. Tesla"
-                      className={errors.make ? "border-red-500" : ""}
+                      className={`${errors.make ? "border-red-500" : ""} ${processImageResult?.partialExtraction && !getValues("make") ? "border-orange-300 bg-orange-50" : ""}`}
                     />
                     {errors.make && (
                       <p className="text-xs text-red-500">
                         {errors.make.message}
+                      </p>
+                    )}
+                    {processImageResult?.partialExtraction && !getValues("make") && !errors.make && (
+                      <p className="text-xs text-orange-600">
+                        Required - AI could not extract this field
                       </p>
                     )}
                   </div>

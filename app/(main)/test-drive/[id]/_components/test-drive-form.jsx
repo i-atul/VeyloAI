@@ -202,9 +202,12 @@ export function TestDriveForm({ car, testDriveInfo }) {
             <div className="aspect-video rounded-xl overflow-hidden relative mb-5 border border-gray-200">
               {car.images && car.images.length > 0 ? (
                 <img
-                  src={car.images[0]}
+                  src={car.images[0] || '/logo.png'}
                   alt={`${car.year} ${car.make} ${car.model}`}
                   className="object-cover w-full h-full"
+                  onError={(e) => {
+                    e.currentTarget.src = '/logo.png';
+                  }}
                 />
               ) : (
                 <div className="w-full h-full bg-gray-100 flex items-center justify-center">

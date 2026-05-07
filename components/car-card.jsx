@@ -1,27 +1,34 @@
 "use client";
 
-import React, { use } from 'react'
+import React from 'react'
 import { Card, CardContent } from './ui/card'
 import Image from 'next/image'
 import { Button } from './ui/button'
 import { CarIcon, Heart, Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
 import useFetch from '@/hooks/use-fetch';
 import { toggleSavedCar } from '@/actions/car-listing';
 import { useAuth } from '@clerk/clerk-react';
-import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/helper';
 
-
-
-const CarCard = ({car}) => {
-
-    const [isSaved, setIsSaved] = useState(car.wishlisted);
-    const router = useRouter();
-    const {isSignedIn} = useAuth()
+const CarCard = ({ car }) => {
+  const [isSaved, setIsSaved] = useState(car.wishlisted);
+  const [imageSrc, setImageSrc] = useState(() => {
+    // Ensure images is an array and has valid content
+    if (Array.isArray(car.images) && car.images.length > 0) {
+      const firstImage = car.images[0];
+      if (typeof firstImage === 'string' && firstImage.trim()) {
+        return firstImage;
+      }
+    }
+    return '/logo.png';
+  });
+  const [imageError, setImageError] = useState(false);
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
 
     const {
     loading: isToggling,
@@ -61,20 +68,24 @@ const CarCard = ({car}) => {
 
   return <Card className="overflow-hidden shadow-xl border border-gray-100 rounded-2xl bg-gradient-to-br from-white via-gray-50 to-gray-100 transition group hover:scale-[1.015] hover:shadow-2xl">
     <div className='relative h-52'>
-        {car.images && car.images.length > 0 ?(
-       <div className="relative w-full h-full">
-        <Image src={car.images[0] || "/logo.png"}
-        alt={`${car.make} ${car.model}`}
-        fill
-        className="object-cover group-hover:scale-110 transition duration-500 rounded-t-2xl"
-        />
-       </div>
-    
-    ) : (
+      {imageSrc && !imageError ? (
+        <div className="relative w-full h-full">
+          <Image
+            src={imageSrc}
+            alt={`${car.make} ${car.model}`}
+            fill
+            className="object-cover group-hover:scale-110 transition duration-500 rounded-t-2xl"
+            onError={() => {
+              setImageError(true);
+              setImageSrc('/logo.png');
+            }}
+          />
+        </div>
+      ) : (
         <div className="w-full h-full bg-gray-200 flex items-center justify-center rounded-t-2xl">
-            <CarIcon className="h-14 w-14 text-gray-300" />
-          </div>
-        )}
+          <CarIcon className="h-14 w-14 text-gray-300" />
+        </div>
+      )}
 
         <Button variant="ghost" size="icon" className={`absolute top-3 right-3 bg-white/90 rounded-full p-2 shadow-md border border-gray-100 transition-all ${
             isSaved
